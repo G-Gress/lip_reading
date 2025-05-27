@@ -19,12 +19,6 @@ from src.ml_logic.alphabet import num_to_char
 def predict_on_video(video_path: str):
     """
     Run inference on a single video file (.mpg).
-
-    Args:
-        video_path (str): Path to the input video file
-
-    Prints:
-        The predicted class index and decoded characters.
     """
     print(f"🎥 Preprocessing video: {video_path}")
     video_tensor = preprocess_video(video_path)
@@ -42,18 +36,12 @@ def predict_on_video(video_path: str):
     print("🔮 Predicting...")
     yhat = model.predict(video_tensor)
 
-    print("📖 Decoding prediction (CTC)...")
-    decoded = tf.keras.backend.ctc_decode(
-        yhat,
-        input_length=tf.constant([yhat.shape[1]]),
-        greedy=True
-    )[0][0].numpy()
+    print("📖 Decoding prediction (argmax)...")
+    predicted_class = np.argmax(yhat[0])
+    predicted_char = num_to_char(tf.constant([predicted_class])).numpy()[0].decode("utf-8")
 
-    print("📝 Predicted characters:")
-    for sentence in decoded:
-        chars = [num_to_char(c) for c in sentence if c != -1]
-        result = tf.strings.reduce_join(chars).numpy().decode("utf-8")
-        print(f"👉 {result}")
+    print("📝 Predicted character:")
+    print(f"👉 {predicted_char}")
 
 
 if __name__ == "__main__":

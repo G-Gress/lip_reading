@@ -55,9 +55,16 @@ def preprocess(frames: list) -> tf.Tensor:
 def preprocess_video(video_path: str) -> tf.Tensor:
     """
     Preprocess a single video file for inference.
+    Ensures the output has fixed shape (1, 24, 46, 140, 1)
     """
+    import cv2
+    import numpy as np
+    import tensorflow as tf
+    from src.ml_logic.preprocessor import crop_face_region, normalize_frames
+
     cap = cv2.VideoCapture(video_path)
     frames = []
+
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -80,5 +87,15 @@ def preprocess_video(video_path: str) -> tf.Tensor:
     if len(processed_frames) == 0:
         return None
 
+    # 👇 時間軸 T=24 に固定
+    T = 24
+    if len(processed_frames) < T:
+        # Pad with last frame
+        last_frame = processed_frames[-1]
+        while len(processed_frames) < T:
+            processed_frames.append(last_frame)
+    elif len(processed_frames) > T:
+        processed_frames = processed_frames[:T]
+
     normalized = normalize_frames(processed_frames)
-    return tf.expand_dims(normalized, axis=0)
+    return tf.expand_dims(normalized, axis=0)  # shape: (1, T, H, W, C)
