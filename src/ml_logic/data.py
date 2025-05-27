@@ -2,30 +2,28 @@ from pathlib import Path
 import cv2
 from src.params import RAW_DATA_DIR
 
+# Convert alignment time (ms) to video frame indices
+SCALE = 1 / 1000  # 1000 alignment steps per second, video ~25fps
+
 def load_alignment_paths():
     """
-    Returns a sorted list of all .align alignment file paths
-    under raw_data/alignments
+    Return a sorted list of .align alignment file paths
+    under raw_data/alignments.
     """
     alignments_dir = RAW_DATA_DIR / "alignments"
-    align_files = sorted(alignments_dir.glob("**/*.align"))
-    return align_files
+    return sorted(alignments_dir.glob("**/*.align"))
 
 def load_video_paths():
     """
-    Returns a sorted list of all .mpg video file paths
-    under raw_data/videos
+    Return a sorted list of .mpg video file paths
+    under raw_data/videos.
     """
     videos_dir = RAW_DATA_DIR / "videos"
-    mpg_files = sorted(videos_dir.glob("**/*.mpg"))
-    return mpg_files
+    return sorted(videos_dir.glob("**/*.mpg"))
 
 def read_alignment_file(path):
     """
-    Reads an alignment  file and returns a list of (word, start_frame, end_frame) tuples.
-
-    Example:
-    [("PLACE", 0, 15), ("RED", 16, 30), ...]
+    Read a .align file and return a list of (word, start_time, end_time) tuples.
     """
     words = []
     with open(path, 'r') as f:
@@ -40,50 +38,50 @@ def read_alignment_file(path):
 
 def load_video_frames(path):
     """
-    Loads a video (.mpg) file and returns a list of frames (as numpy arrays).
+    Load video frames as a list of numpy arrays.
     """
     cap = cv2.VideoCapture(str(path))
     frames = []
-
     while True:
         ret, frame = cap.read()
         if not ret:
             break
         frames.append(frame)
-
     cap.release()
     return frames
 
 def load_data():
     """
-    Load and prepare video frame sequences and their corresponding words.
+    Load video-alignment pairs and extract word-level frame sequences.
 
     Returns:
-        X (list): List of frame sequences (each item = list of frames for one word)
-        y (list): List of word labels
+        X (list): List of list-of-frames per word
+        y (list): List of corresponding word labels
     """
     video_paths = load_video_paths()
-
-    X = []
-    y = []
+    X, y = [], []
 
     for video_path in video_paths:
-        # Guess the corresponding alignment file path
         speaker = video_path.parts[-2]
-        video_name = video_path.stem  # e.g., "vid1" without extension
-        alignment_path = Path(RAW_DATA_DIR) / "alignments" / speaker / (video_name + ".align")
+        video_name = video_path.stem
+        alignment_path = RAW_DATA_DIR / "alignments" / speaker / f"{video_name}.align"
 
         if not alignment_path.exists():
-            continue  # Skip if the alignment file does not exist
+            continue
 
-        # Load video frames
         frames = load_video_frames(video_path)
+        n_frames = len(frames)
 
-        # Load alignment content
         word_infos = read_alignment_file(alignment_path)
 
         for word, start, end in word_infos:
-            word_frames = frames[start:end + 1]  # Extract relevant frame segment
+            start_idx = max(0, int(start * SCALE))
+            end_idx = min(n_frames - 1, int(end * SCALE))
+
+            if start_idx >= end_idx:
+                continue
+
+            word_frames = frames[start_idx:end_idx + 1]
             X.append(word_frames)
             y.append(word)
 

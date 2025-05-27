@@ -1,42 +1,63 @@
-# Load the trained model from file
-from src.ml_logic.model import load_model
+"""
+This script performs inference on a single lip-reading video.
 
-# Preprocess the video for model input
-# (This function should convert a video file into the required input format, e.g., a NumPy array)
-from src.ml_logic.preprocessor import preprocess_video
+Steps:
+1. Load and preprocess the input video.
+2. Load the trained model.
+3. Predict using the model.
+4. Decode and display the predicted output.
+"""
 
+import sys
 import numpy as np
+import tensorflow as tf
+from src.ml_logic.model import load_model
+from src.ml_logic.preprocessor import preprocess_video
+from src.ml_logic.alphabet import num_to_char
 
-def predict_on_video(video_path):
-    """
-    Run inference (prediction) on a single video file.
-    This function loads the model, preprocesses the input video,
-    and prints out the predicted class.
-    """
 
+def predict_on_video(video_path: str):
+    """
+    Run inference on a single video file (.mpg).
+
+    Args:
+        video_path (str): Path to the input video file
+
+    Prints:
+        The predicted class index and decoded characters.
+    """
     print(f"🎥 Preprocessing video: {video_path}")
-    video_data = preprocess_video(video_path)  # Expected shape: (1, time, height, width, channels)
+    video_tensor = preprocess_video(video_path)
 
-    if video_data is None:
-        print("❌ Failed to process video.")
+    if video_tensor is None:
+        print("❌ Failed to preprocess video.")
         return
 
-    print("🤖 Loading model...")
-    model = load_model()  # Loads the trained model from disk
-
+    print("🤖 Loading trained model...")
+    model = load_model()
     if model is None:
-        print("❌ No model found.")
+        print("❌ No trained model found. Please run train.py first.")
         return
 
-    print("🔮 Making prediction...")
-    prediction = model.predict(video_data)  # Predict probabilities for each class
-    predicted_class = np.argmax(prediction)  # Choose the class with the highest probability
+    print("🔮 Predicting...")
+    yhat = model.predict(video_tensor)
 
-    print(f"🎯 Predicted class index: {predicted_class}")
+    print("📖 Decoding prediction (CTC)...")
+    decoded = tf.keras.backend.ctc_decode(
+        yhat,
+        input_length=tf.constant([yhat.shape[1]]),
+        greedy=True
+    )[0][0].numpy()
+
+    print("📝 Predicted characters:")
+    for sentence in decoded:
+        chars = [num_to_char(c) for c in sentence if c != -1]
+        result = tf.strings.reduce_join(chars).numpy().decode("utf-8")
+        print(f"👉 {result}")
+
 
 if __name__ == "__main__":
-    import sys
     if len(sys.argv) != 2:
-        print("Usage: python inference.py path_to_video.mp4")
+        print("Usage: python inference.py path_to_video.mpg")
     else:
         predict_on_video(sys.argv[1])
