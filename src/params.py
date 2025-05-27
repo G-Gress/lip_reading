@@ -15,3 +15,9 @@ DATA_DIR = BASE_DIR / "data"
 
 # Path to the dlib facial landmark model
 DLIB_MODEL_PATH = BASE_DIR / "shape_predictor_68_face_landmarks.dat"
+
+# Model training hyperparameters
+BATCH_SIZE = 32
+EPOCHS = 20
+IMG_HEIGHT = 64
+IMG_WIDTH = 64
