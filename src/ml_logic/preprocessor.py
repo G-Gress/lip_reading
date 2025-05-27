@@ -33,8 +33,7 @@ import dlib
 import cv2
 
 # Initialize dlib's face detector (HOG-based)
-face_detector = dlib.get_frontal_detector()
-
+face_detector = dlib.get_frontal_face_detector()
 def crop_face_region(frame:np.ndarray) -> np.ndarray:
     """
     Detect and crop the face region from a single frame using dlib.
@@ -64,3 +63,16 @@ def crop_face_region(frame:np.ndarray) -> np.ndarray:
     x2, y2 = min(w, x2), min(h, y2)
 
     return frame[y1:y2, x1:x2]
+
+def preprocess(frames: list) -> tf.Tensor:
+    """
+    Crop faces and normalize a list of frames.
+
+    Args:
+        frames (list): List of image frames (as np.ndarray)
+
+    Returns:
+        tf.Tensor: Preprocessed tensor (normalized, cropped)
+    """
+    cropped_frames = [crop_face_region(frame) for frame in frames]
+    return normalize_frames(cropped_frames)
