@@ -4,13 +4,33 @@ Used for encoding text (char to num) and decoding model output (num to char).
 """
 
 import tensorflow as tf
-from tensorflow.keras.layers import StringLookup
 
-# Define the character set: a-z, apostrophe, and space
-characters = [char for char in "abcdefghijklmnopqrstuvwxyz' "]
+# Define the full vocabulary
+vocab = list("abcdefghijklmnopqrstuvwxyz'?1234567890 ")
 
-# Convert characters to numeric indices
-char_to_num = StringLookup(vocabulary=characters, oov_token="", name="char_to_num")
+# Conversion: character → integer
+char_to_num = tf.keras.layers.StringLookup(
+    vocabulary=vocab,
+    oov_token=""
+)
 
-# Convert numeric indices back to characters
-num_to_char = StringLookup(vocabulary=characters, oov_token="", invert=True, name="num_to_char")
+# Conversion: integer → character
+num_to_char = tf.keras.layers.StringLookup(
+    vocabulary=char_to_num.get_vocabulary(),
+    invert=True
+)
+def encode(text: str) -> tf.Tensor:
+    """
+    Encode a string into a tensor of integer indices.
+    Example: "hello" → [8, 5, 12, 12, 15]
+    """
+    chars = tf.strings.unicode_split(text.lower(), input_encoding="UTF-8")
+    return char_to_num(chars)
+
+def decode(indices: tf.Tensor) -> str:
+    """
+    Decode a tensor of integer indices into a string.
+    Example: [8, 5, 12, 12, 15] → "hello"
+    """
+    chars = num_to_char(indices)
+    return tf.strings.reduce_join(chars).numpy().decode("utf-8")

@@ -1,14 +1,16 @@
 """
-This script performs inference on a single lip-reading video.
+This script performs inference on all videos in the inference_videos folder
+using a trained CTC model.
 
 Steps:
-1. Load and preprocess the input video.
-2. Load the trained model.
+1. Load and preprocess each video.
+2. Load the trained CTC model.
 3. Predict using the model.
-4. Decode and display the predicted output.
+4. Decode the predicted output using CTC decoding.
 """
 
-import sys
+import os
+import glob
 import numpy as np
 import tensorflow as tf
 from src.ml_logic.model import load_model
@@ -16,48 +18,64 @@ from src.ml_logic.preprocessor import preprocess_video
 from src.ml_logic.alphabet import num_to_char
 
 
-def predict_on_video(video_path: str):
+def decode_prediction(y_pred: tf.Tensor) -> str:
     """
-    Run inference on a single video file (.mpg).
+    Decode the output tensor from the model using CTC decoding.
 
     Args:
-        video_path (str): Path to the input video file
+        y_pred (tf.Tensor): Model prediction of shape (1, time, vocab_size)
 
-    Prints:
-        The predicted class index and decoded characters.
+    Returns:
+        str: Decoded text from the model output
     """
-    print(f"🎥 Preprocessing video: {video_path}")
+    decoded, _ = tf.keras.backend.ctc_decode(
+        y_pred,
+        input_length=tf.fill([tf.shape(y_pred)[0]], tf.shape(y_pred)[1]),
+        greedy=True
+    )
+    prediction = decoded[0][0].numpy()
+    text = tf.strings.reduce_join(num_to_char(prediction)).numpy().decode("utf-8")
+    return text
+
+
+def predict_on_video(video_path: str, model: tf.keras.Model):
+    """
+    Run inference on a single video file and decode the output.
+    """
+    print(f"\n🎥 Preprocessing video: {video_path}")
     video_tensor = preprocess_video(video_path)
 
     if video_tensor is None:
         print("❌ Failed to preprocess video.")
         return
 
+    video_tensor = tf.expand_dims(video_tensor, axis=0)
+
+    print("🔮 Predicting...")
+    y_pred = model.predict(video_tensor)
+
+    print("📖 Decoding prediction using CTC...")
+    decoded_text = decode_prediction(y_pred)
+
+    print("📝 Predicted transcription:")
+    print(f"👉 {decoded_text}")
+
+
+def predict_all_videos():
+    """
+    Perform inference on all videos in the inference_videos folder.
+    """
     print("🤖 Loading trained model...")
     model = load_model()
     if model is None:
-        print("❌ No trained model found. Please run train.py first.")
+        print("❌ No trained model found.")
         return
 
-    print("🔮 Predicting...")
-    yhat = model.predict(video_tensor)
+    video_paths = glob.glob("inference_videos/*.mpg") + glob.glob("inference_videos/*.mp4")
 
-    print("📖 Decoding prediction (CTC)...")
-    decoded = tf.keras.backend.ctc_decode(
-        yhat,
-        input_length=tf.constant([yhat.shape[1]]),
-        greedy=True
-    )[0][0].numpy()
+    if not video_paths:
+        print("⚠️ No video files found in 'inference_videos/'")
+        return
 
-    print("📝 Predicted characters:")
-    for sentence in decoded:
-        chars = [num_to_char(c) for c in sentence if c != -1]
-        result = tf.strings.reduce_join(chars).numpy().decode("utf-8")
-        print(f"👉 {result}")
-
-
-if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python inference.py path_to_video.mpg")
-    else:
-        predict_on_video(sys.argv[1])
+    for video_path in video_paths:
+        predict_on_video(video_path, model)

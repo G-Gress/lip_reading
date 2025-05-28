@@ -1,84 +1,69 @@
-import tensorflow as tf
-import numpy as np
+import os
 import cv2
-import dlib
+import numpy as np
+import tensorflow as tf
+from pathlib import Path
 
-# Initialize face detector
-face_detector = dlib.get_frontal_face_detector()
+def preprocess_video(video_path: str, max_time: int = None) -> tf.Tensor:
+    print("🔥 preprocess_video called!")
+    if not os.path.exists(video_path):
+        print(f"❌ File not found: {video_path}")
+        return None
 
-def crop_face_region(frame: np.ndarray) -> np.ndarray:
-    """
-    Detect and crop the face region from a single frame using dlib.
-    """
-    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    faces = face_detector(rgb_frame)
-
-    if len(faces) == 0:
-        return frame
-
-    face = faces[0]
-    x1, y1, x2, y2 = face.left(), face.top(), face.right(), face.bottom()
-    h, w, _ = frame.shape
-    x1, y1 = max(0, x1), max(0, y1)
-    x2, y2 = min(w, x2), min(h, y2)
-
-    return frame[y1:y2, x1:x2]
-
-def normalize_frames(frames: list) -> tf.Tensor:
-    """
-    Normalize a list of frames by subtracting mean and dividing by std.
-    """
-    frames_tensor = tf.convert_to_tensor(frames, dtype=tf.float32)
-    mean = tf.math.reduce_mean(frames_tensor)
-    std = tf.math.reduce_std(frames_tensor)
-    return (frames_tensor - mean) / std
-
-def preprocess(frames: list) -> tf.Tensor:
-    """
-    Preprocess a list of frames for training.
-    """
-    processed_frames = []
-
-    for frame in frames:
-        cropped = crop_face_region(frame)
-        if cropped.shape[0] > 0 and cropped.shape[1] > 0:
-            resized = cv2.resize(cropped, (140, 46))
-            gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
-            expanded = np.expand_dims(gray, axis=-1)
-            processed_frames.append(expanded)
-
-    if len(processed_frames) == 0:
-        raise ValueError("No valid frames to preprocess.")
-
-    return normalize_frames(processed_frames)
-
-def preprocess_video(video_path: str) -> tf.Tensor:
-    """
-    Preprocess a single video file for inference.
-    """
     cap = cv2.VideoCapture(video_path)
     frames = []
+
     while True:
-        ret, frame = cap.read()
-        if not ret:
+        success, frame = cap.read()
+        if not success:
             break
-        frames.append(frame)
+
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        resized = cv2.resize(gray, (140, 46))
+        resized = np.expand_dims(resized, axis=-1)
+        frames.append(resized)
+
     cap.release()
 
-    if len(frames) == 0:
+    if not frames:
+        print("❌ No frames extracted from video.")
         return None
 
-    processed_frames = []
+    if max_time is not None:
+        frames = frames[:max_time]
+        while len(frames) < max_time:
+            frames.append(np.zeros((46, 140, 1), dtype=np.float32))
+
+    video_array = np.array(frames, dtype=np.float32) / 255.0
+    video_tensor = tf.convert_to_tensor(video_array)
+    print("✅ Shape of preprocessed input:", video_tensor.shape)
+    return video_tensor
+
+
+def normalize_frames(frames, max_time: int = None) -> tf.Tensor:
+    gray_frames = []
+
     for frame in frames:
-        cropped = crop_face_region(frame)
-        if cropped.shape[0] > 0 and cropped.shape[1] > 0:
-            resized = cv2.resize(cropped, (140, 46))
-            gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
-            expanded = np.expand_dims(gray, axis=-1)
-            processed_frames.append(expanded)
+        if frame.ndim == 3 and frame.shape[-1] == 3:
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-    if len(processed_frames) == 0:
-        return None
+        resized = cv2.resize(frame, (140, 46))
+        resized = np.expand_dims(resized, axis=-1)
+        gray_frames.append(resized)
 
-    normalized = normalize_frames(processed_frames)
-    return tf.expand_dims(normalized, axis=0)
+    if max_time is not None:
+        gray_frames = gray_frames[:max_time]
+        while len(gray_frames) < max_time:
+            gray_frames.append(np.zeros((46, 140, 1), dtype=np.float32))
+
+    video_array = np.array(gray_frames, dtype=np.float32) / 255.0
+    return tf.convert_to_tensor(video_array)
+
+
+def preprocess(input, max_time: int = None) -> tf.Tensor:
+    if isinstance(input, (str, Path)):
+        return preprocess_video(input, max_time=max_time)
+    elif isinstance(input, (list, np.ndarray)):
+        return normalize_frames(input, max_time=max_time)
+    else:
+        raise ValueError(f"Unsupported input type: {type(input)}")
