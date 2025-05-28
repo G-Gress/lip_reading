@@ -2,8 +2,9 @@ from pathlib import Path
 import cv2
 from src.params import RAW_DATA_DIR
 
-# Convert alignment time (ms) to video frame indices
-SCALE = 1 / 1000  # 1000 alignment steps per second, video ~25fps
+SCALE = 1 / 1000  # Convert alignment timestamp (ms) to seconds
+                 # .align files give start/end in milliseconds
+                 # Frame index ≈ time_in_seconds * fps (≈25)
 
 def load_alignment_paths():
     """
@@ -52,11 +53,16 @@ def load_video_frames(path):
 
 def load_data():
     """
-    Load video-alignment pairs and extract word-level frame sequences.
+    Load all video and alignment files, and extract per-word frame sequences.
+
+    Process:
+    - For each .mpg video, find its corresponding .align file
+    - For each word in the alignment, convert its start/end time to frame indices
+    - Extract the corresponding sequence of frames (as numpy arrays)
 
     Returns:
-        X (list): List of list-of-frames per word
-        y (list): List of corresponding word labels
+        X (list): List of sequences of frames (1 word = [frame1, frame2, ...])
+        y (list): List of word labels (e.g., ["hello", "world", ...])
     """
     video_paths = load_video_paths()
     X, y = [], []
@@ -85,4 +91,13 @@ def load_data():
             X.append(word_frames)
             y.append(word)
 
+    return X, y
+
+def load_test_data(limit=100):
+    """
+    Load a small portion of data for evaluation (test mode).
+    """
+    X, y = load_data()
+    X = X[:limit]
+    y = y[:limit]
     return X, y

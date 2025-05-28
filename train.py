@@ -1,5 +1,5 @@
 """
-Train the lip-reading model on a small sample.
+Train the lip-reading model on a sample dataset.
 Saves the trained model to models/lip_model.keras
 """
 
@@ -10,9 +10,9 @@ import tensorflow as tf
 
 def train():
     print("🔍 Loading data...")
-    X_raw, y_raw = data.load_data()
+    X_raw, y_raw = data.load_data()  # ✅ KEEP: Works if data format is standardized
 
-    # Use only first N samples for quick testing
+    # ❗ TO MODIFY: Limit to 10 samples for demo purposes only
     N = 10
     X_raw = X_raw[:N]
     y_raw = y_raw[:N]
@@ -22,17 +22,18 @@ def train():
     X = []
     y = []
 
-    for i in range(N):
+    for i in range(N):  # ❗ TO MODIFY: Replace with full loop or train/test split logic
         try:
-            frames = preprocessor.preprocess(X_raw[i])  # shape: (T, 46, 140, 1)
+            frames = preprocessor.preprocess(X_raw[i])  # ✅ KEEP: Resizing and normalizing
             if frames.shape[0] < 1:
                 raise ValueError("No valid frames to preprocess.")
             X.append(frames)
 
-            label = y_raw[i]
-            label_char = label[0].lower()  # Convert to lowercase
+            # ⚠️ REVIEW: Only the first character is used → adapt if classifying full words
+            label_char = y_raw[i][0].lower()
             y_idx = char_to_num(tf.constant(label_char)).numpy().item()
             y.append(y_idx)
+
         except Exception as e:
             print(f"⚠️ Skipped sample {i} due to error: {e}")
 
@@ -40,26 +41,25 @@ def train():
         print("❌ No valid data to train.")
         return
 
-    # Pad sequences to uniform length
     print("📐 Padding sequences to uniform length...")
     max_len = max([x.shape[0] for x in X])
     X_padded = np.array([
         np.pad(x, ((0, max_len - x.shape[0]), (0, 0), (0, 0), (0, 0)), mode='constant')
         for x in X
     ])
-    X = X_padded  # shape: (N, max_time, 46, 140, 1)
+    X = X_padded
     y = np.array(y)
 
     print(f"✅ Final training set: {X.shape}, Labels: {y.shape}")
 
     print("📦 Building model...")
-    lip_model = model.build_model()
+    lip_model = model.build_model()  # ✅ KEEP: Model is built using external clean logic
 
     print("🏋️ Training model...")
-    lip_model.fit(X, y, epochs=3, batch_size=2)
+    lip_model.fit(X, y, epochs=3, batch_size=2)  # ❗ TO MODIFY: Tune hyperparameters later
 
     print("💾 Saving model...")
-    model.save_model(lip_model)
+    model.save_model(lip_model)  # ✅ KEEP: Reusable save function
     print("✅ Model saved!")
 
 if __name__ == "__main__":
