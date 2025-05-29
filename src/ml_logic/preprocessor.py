@@ -67,3 +67,14 @@ def preprocess(input, max_time: int = None) -> tf.Tensor:
         return normalize_frames(input, max_time=max_time)
     else:
         raise ValueError(f"Unsupported input type: {type(input)}")
+
+
+def preprocess_frame(frame: np.ndarray) -> np.ndarray:
+    """
+    Preprocess a single frame for live stream prediction.
+    Output shape: (46, 140, 1)
+    """
+    frame_resized = cv2.resize(frame, (140, 46))
+    frame_gray = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2GRAY)
+    frame_norm = frame_gray.astype("float32") / 255.0
+    return np.expand_dims(frame_norm, axis=-1)
