@@ -1,14 +1,3 @@
-"""
-This script performs inference on all videos in the inference_videos folder
-using a trained CTC model.
-
-Steps:
-1. Load and preprocess each video.
-2. Load the trained CTC model.
-3. Predict using the model.
-4. Decode the predicted output using CTC decoding.
-"""
-
 import os
 import glob
 import numpy as np
@@ -34,56 +23,34 @@ def decode_prediction(y_pred: tf.Tensor) -> str:
         greedy=True
     )
     prediction = decoded[0][0].numpy()
-
-
-    # ✅ Remove invalid indices (-1)
     prediction = prediction[prediction != -1]
-
     text = tf.strings.reduce_join(num_to_char(prediction)).numpy().decode("utf-8")
     return text
 
 
-def predict_on_video(video_path: str, model: tf.keras.Model):
+def run_inference(video_path: str) -> str:
     """
-    Run inference on a single video file and decode the output.
+    Perform inference on a single video and return predicted text.
+
+    Args:
+        video_path (str): Path to the video file.
+
+    Returns:
+        str: Decoded prediction text or error message.
     """
-    print(f"\n🎥 Preprocessing video: {video_path}")
-    video_tensor = preprocess_video(video_path)
-
-    if video_tensor is None:
-        print("❌ Failed to preprocess video.")
-        return
-
-    video_tensor = tf.expand_dims(video_tensor, axis=0)
-
-    print("🔮 Predicting...")
-    y_pred = model.predict(video_tensor)
-
-    print("📖 Decoding prediction using CTC...")
-    decoded_text = decode_prediction(y_pred)
-
-    print("📝 Predicted transcription:")
-    print(f"👉 {decoded_text}")
-
-
-def predict_all_videos():
-    """
-    Perform inference on all videos in the inference_videos folder.
-    """
-    print("🤖 Loading trained model...")
     model = load_model()
     if model is None:
-        print("❌ No trained model found.")
-        return
+        return "❌ No trained model found."
 
-    video_paths = glob.glob("inference_videos/*.mpg") + glob.glob("inference_videos/*.mp4")
+    if not os.path.exists(video_path):
+        return f"❌ File not found: {video_path}"
 
-    if not video_paths:
-        print("⚠️ No video files found in 'inference_videos/'")
-        return
+    video_tensor = preprocess_video(video_path)
+    if video_tensor is None:
+        return "❌ Failed to preprocess video."
 
-    for video_path in video_paths:
-        predict_on_video(video_path, model)
+    video_tensor = tf.expand_dims(video_tensor, axis=0)
+    y_pred = model.predict(video_tensor)
 
-if __name__ == "__main__":
-    predict_all_videos()
+    decoded_text = decode_prediction(y_pred)
+    return decoded_text
