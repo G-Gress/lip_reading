@@ -1,6 +1,32 @@
 import streamlit as st
 import os
 
+from src.ml_logic.model import load_model
+from src.ml_logic.preprocessor_copy import preprocess_video
+from src.ml_logic.alphabet import decode
+import tensorflow as tf
+import numpy as np
+
+# Encoder
+# Vocabulary to encode
+vocab = [x for x in "abcdefghijklmnopqrstuvwxyz'?!123456789 "]
+
+# Char to num converter
+char_to_num = tf.keras.layers.StringLookup(vocabulary=vocab, oov_token="")
+# Num to char converter
+num_to_char = tf.keras.layers.StringLookup(vocabulary=char_to_num.get_vocabulary(), oov_token="", invert=True)
+
+
+# LOAD MODEL WITH UPDATED WEIGHTS
+@st.cache_resource
+def load_lipnet_model():
+
+    model = load_model() #used with Kazus ml_logic.model load_model.py
+    model.load_weights("model_weights/checkpoint_epoch25_loss0.79.weights.h5")
+    return model
+
+model = load_lipnet_model()
+
 # CUSTOM STYLE
 
 st.markdown("""
@@ -59,12 +85,26 @@ with col2:
     # Dummy transcription (placeholder for model output)
     st.markdown("This is where the transcription from the lip reading model will appear.")
 
-    transcription = ""
-    if selected_video == "bbaf2n.mp4":
-        st.success("Simulated: 'Bin blue at f two now'")
-    elif selected_video == "sample2.mp4":
-        st.success("Simulated: 'Can you read my lips?'")
-    else:
-        st.info("Simulated: 'Lip reading in progress...'")
+    if st.button("Transcribe"):
 
-    st.markdown(f"<div class='transcription-box'>{transcription}</div>", unsafe_allow_html=True)
+        #preprocess and predict
+        frames = preprocess_video(video_path)
+
+        # Testing model and frame shapes
+        # st.write("Model input shape:", model.input_shape)
+        # st.write("Preprocessed input shape:", frames.shape)
+        frames = np.expand_dims(frames, axis=0)  # shape becomes (1, 75, 46, 140, 1)
+
+        yhat = model.predict(frames) #shape (1, 75, 41)
+        st.write(yhat.shape)
+        st.write(yhat.dtype)
+
+        sequence_length = [75]
+
+        decoded = tf.keras.backend.ctc_decode(yhat, sequence_length, greedy=False)[0][0].numpy()
+        for x in range(len(yhat)):
+            prediction = tf.strings.reduce_join(num_to_char(decoded[x])).numpy().decode('utf-8')
+
+        # prediction = decode(decoded)
+
+        st.success(f"Transcription: {prediction}")
