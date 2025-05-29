@@ -2,7 +2,7 @@ import streamlit as st
 import os
 
 from src.ml_logic.model import load_model
-from src.ml_logic.preprocessor_copy import preprocess_video
+from src.ml_logic.preprocess_for_streamlit import preprocess_video
 from src.ml_logic.alphabet import decode
 import tensorflow as tf
 import numpy as np
@@ -96,12 +96,14 @@ with col2:
         frames = np.expand_dims(frames, axis=0)  # shape becomes (1, 75, 46, 140, 1)
 
         yhat = model.predict(frames) #shape (1, 75, 41)
-        st.write(yhat.shape)
-        st.write(yhat.dtype)
+        # Testing prediction output shape
+        # st.write(yhat.shape)
+        # st.write(yhat.dtype)
 
         sequence_length = [75]
 
         decoded = tf.keras.backend.ctc_decode(yhat, sequence_length, greedy=False)[0][0].numpy()
+
         for x in range(len(yhat)):
             prediction = tf.strings.reduce_join(num_to_char(decoded[x])).numpy().decode('utf-8')
 
