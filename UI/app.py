@@ -3,24 +3,16 @@ import os
 
 from src.ml_logic.model import load_model
 from src.ml_logic.preprocess_for_streamlit import preprocess_video
-from src.ml_logic.alphabet import decode
+from src.ml_logic.alphabet import decode_streamlit
 from src.ml_logic.data import return_words
 import tensorflow as tf
 import numpy as np
-
-# Encoder
-# Vocabulary to encode
-vocab = [x for x in "abcdefghijklmnopqrstuvwxyz'?!123456789 "]
-
-# Char to num converter
-char_to_num = tf.keras.layers.StringLookup(vocabulary=vocab, oov_token="")
-# Num to char converter
-num_to_char = tf.keras.layers.StringLookup(vocabulary=char_to_num.get_vocabulary(), oov_token="", invert=True)
-
+import imageio
+import time
 
 # LOAD MODEL WITH UPDATED WEIGHTS
 @st.cache_resource
-def load_lipnet_model(weights = "model_weights/checkpoint_epoch25_loss0.79.weights.h5"):
+def load_lipnet_model(weights = "model_weights/checkpoint_epoch20_loss0.92.weights.h5"):
 
     model = load_model() #used with Kazus ml_logic.model load_model.py
     model.load_weights(weights)
@@ -75,40 +67,56 @@ with col1:
             video_bytes = f.read()
         st.video(video_bytes)
 
+    if st.button("Computer Vision"):
 
+        # Preprocess video
+        frames = preprocess_video(video_path)
+
+        # Make Animation
+        frames_for_gif = [(frame.numpy().squeeze() * 255).astype(np.uint8) for frame in frames]
+        imageio.mimsave('animation.gif', frames_for_gif, fps=10)
+
+        st.info('This is all the machine learning model sees when making a prediction')
+
+        st.image('animation.gif', width=400)
 
 with col2:
-    st.header("🗣️ Transcribed Text (Simulated)")
-
-    st.markdown("These are the original words")
-
-    #Select correct alignment file and read
-    alignment_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'raw_data', 'alignments', 's1', f'{video_name}.align'))
-    words_in_alignment = return_words(alignment_path)
-    st.success(words_in_alignment)
+    st.header("🗣️ Transcribed Text")
 
     if st.button("Transcribe"):
 
-        #preprocess and predict
+        # Preprocess video
         frames = preprocess_video(video_path)
 
         # Testing model and frame shapes
         # st.write("Model input shape:", model.input_shape)
         # st.write("Preprocessed input shape:", frames.shape)
-        frames = np.expand_dims(frames, axis=0)  # shape becomes (1, 75, 46, 140, 1)
 
-        yhat = model.predict(frames) #shape (1, 75, 41)
+        # Expand dimensions
+        frames = tf.expand_dims(frames, axis=0)  # shape becomes (1, 75, 46, 140, 1)
+
+        # Predict with the Model
+        model_pred = model.predict(frames) #shape (1, 75, 41)
+
         # Testing prediction output shape
         # st.write(yhat.shape)
         # st.write(yhat.dtype)
 
-        sequence_length = [75]
+        # Decode the prediction
+        prediction = decode_streamlit(model_pred=model_pred)
 
-        decoded = tf.keras.backend.ctc_decode(yhat, sequence_length, greedy=False)[0][0].numpy()
+        st.write("Transcription:")
+        st.success(f"{prediction}")
 
-        for x in range(len(yhat)):
-            prediction = tf.strings.reduce_join(num_to_char(decoded[x])).numpy().decode('utf-8')
+        time.sleep(1.5)
 
-        # prediction = decode(decoded)
+        try:
+            #Select correct alignment file and read if available
+            alignment_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'raw_data', 'alignments', 's1', f'{video_name}.align'))
+            words_in_alignment = return_words(alignment_path)
+            st.markdown("Versus the original words")
+            st.success(words_in_alignment)
 
-        st.success(f"Transcription: {prediction}")
+        except Exception as e:
+            # Return nothing if not available
+            pass
