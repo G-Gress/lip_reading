@@ -4,7 +4,8 @@ import numpy as np
 import tensorflow as tf
 from src.ml_logic.model import load_model
 from src.ml_logic.preprocessor import preprocess_video
-from src.ml_logic.alphabet import num_to_char
+from src.ml_logic.preprocess_for_streamlit import preprocess_video_streamlit
+from src.ml_logic.alphabet import num_to_char, decode_streamlit
 
 
 def decode_prediction(y_pred: tf.Tensor) -> str:
@@ -54,3 +55,28 @@ def run_inference(video_path: str) -> str:
 
     decoded_text = decode_prediction(y_pred)
     return decoded_text
+
+
+def run_inference_streamlit(video_path: str, model):
+    """
+    FOR STREAMLIT USE:
+    Perform inference on a single video and return decoded predicted text
+    and the preprocessed video file.
+
+    Args:
+        video_path (str): Path to the video file.
+        model: instantiated model
+
+    Returns:
+        str: Decoded prediction text or error message.
+        frames = preprocessed video file
+    """
+    frames = preprocess_video_streamlit(video_path)
+    if frames is None:
+        return "❌ Failed to preprocess video."
+
+    video_tensor = tf.expand_dims(frames, axis=0)
+    y_pred = model.predict(video_tensor)
+
+    decoded_text = decode_streamlit(y_pred)
+    return decoded_text, frames
