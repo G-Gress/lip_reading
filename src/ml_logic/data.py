@@ -37,6 +37,27 @@ def read_alignment_file(path):
                 words.append((word, start_frame, end_frame))
     return words
 
+def return_words(path: str) -> str:
+    '''
+    Load alignments from a path
+    and return the words spoken in the video.
+    '''
+    # Open align file
+    with open(path, "r") as f:
+        lines = f.readlines()
+
+    # Tokenize alignments
+    tokens = []
+    for line in lines:
+        line = line.split()
+
+        # Ignore silence tokens
+        if line[2] != "sil":
+            tokens = [*tokens, ' ', line[2]]
+            transcription = ''.join(tokens)
+
+    return transcription
+
 def load_video_frames(path):
     """
     Load video frames as a list of numpy arrays.
