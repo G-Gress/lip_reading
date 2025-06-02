@@ -1,37 +1,28 @@
-import numpy as np
-
-def wer(reference: str, hypothesis: str) -> float:
+def wer(true: str, pred: str) -> float:
     """
-    Calculate Word Error Rate (WER) between reference and hypothesis strings.
-
-    Args:
-        reference (str): Ground truth sentence
-        hypothesis (str): Predicted sentence
-
-    Returns:
-        float: Word Error Rate
+    Compute the Word Error Rate (WER) between two strings.
     """
-    ref_words = reference.strip().split()
-    hyp_words = hypothesis.strip().split()
-    n = len(ref_words)
+    import numpy as np
 
-    # Initialize the distance matrix
-    d = np.zeros((len(ref_words) + 1, len(hyp_words) + 1), dtype=int)
-    for i in range(len(ref_words) + 1):
-        d[i][0] = i
-    for j in range(len(hyp_words) + 1):
-        d[0][j] = j
+    r = true.split()
+    h = pred.split()
+    d = np.zeros((len(r)+1)*(len(h)+1), dtype=np.uint8).reshape((len(r)+1, len(h)+1))
 
-    for i in range(1, len(ref_words) + 1):
-        for j in range(1, len(hyp_words) + 1):
-            if ref_words[i - 1] == hyp_words[j - 1]:
-                cost = 0
+    for i in range(len(r)+1):
+        for j in range(len(h)+1):
+            if i == 0:
+                d[0][j] = j
+            elif j == 0:
+                d[i][0] = i
+
+    for i in range(1, len(r)+1):
+        for j in range(1, len(h)+1):
+            if r[i-1] == h[j-1]:
+                d[i][j] = d[i-1][j-1]
             else:
-                cost = 1
-            d[i][j] = min(
-                d[i - 1][j] + 1,      # Deletion
-                d[i][j - 1] + 1,      # Insertion
-                d[i - 1][j - 1] + cost  # Substitution
-            )
+                substitute = d[i-1][j-1] + 1
+                insert = d[i][j-1] + 1
+                delete = d[i-1][j] + 1
+                d[i][j] = min(substitute, insert, delete)
 
-    return d[len(ref_words)][len(hyp_words)] / max(n, 1)  # Avoid division by zero
+    return d[len(r)][len(h)] / float(len(r))
