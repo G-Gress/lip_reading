@@ -3,10 +3,7 @@ import streamlit.components.v1 as components
 import os
 import base64
 
-print(os.getcwd())
-
 from src.ml_logic.model import load_model
-# from src.ml_logic.data import return_words
 from src.inference.inference import run_inference_streamlit
 import numpy as np
 import imageio
