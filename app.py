@@ -51,13 +51,13 @@ model = load_lipnet_model()
 
 
 # Custom style
-st.markdown("""
-    <style>
-    .main {
-        background-color: #f8f9fa;
-    }
-    </style>
-""", unsafe_allow_html=True)
+# st.markdown("""
+#     <style>
+#     .main {
+#         background-color: #f8f9fa;
+#     }
+#     </style>
+# """, unsafe_allow_html=True)
 
 # Title
 st.title("Lip Reading MVP")
