@@ -1,5 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
+
+import io
 import os
 import base64
 
@@ -8,6 +10,34 @@ from src.inference.inference import run_inference_streamlit
 import numpy as np
 import imageio
 import time
+
+from PIL import Image
+
+def show_ndarray_frames_as_gif(frames_np: list[np.ndarray]):
+  """
+  Takes a list of ndarrays as input, representing frames of an image,
+  and embeds them as a GIF on the streamlit page.  The GIF data is
+  embedded directly on the page using a blob URL, bypassing the filesystem.
+  """
+
+  # step 1: convert each ndarray frame to a PIL image
+  frames_pil = [Image.fromarray(frame) for frame in frames_np]
+
+  # step 2: use pillow to save the .gif image to a byte stream
+  gif_bytes = io.BytesIO(b"")
+  frames_pil[0].save(gif_bytes, format="gif", save_all=True, append_images=frames_pil[1:], loop=0)
+
+  # step 3: convert the byte stream to a base64 string representation
+  base64_image_string = base64.b64encode(gif_bytes.getvalue()).decode()
+
+  # step 4: create a blob URL
+  img_data_url = 'data:image/gif;base64,' + base64_image_string
+
+  # step 5: embed the blob URL directly inside of an HTML image tag
+  st.write(
+    f'<img src="{img_data_url}" width="600"/>',
+    unsafe_allow_html=True
+  )
 
 # Load model with updated weights
 @st.cache_resource
@@ -77,8 +107,11 @@ if st.button("Transcribe"):
 
     # Make Animation for computer vision
     frames_for_gif = [(frame.numpy().squeeze() * 255).astype(np.uint8) for frame in frames]
-    imageio.mimsave('animation.gif', frames_for_gif, fps=10)
-    st.image('animation.gif', width=600)
+
+    show_ndarray_frames_as_gif(frames_for_gif)
+
+    # imageio.mimsave('animation.gif', frames_for_gif, fps=10)
+    # st.image('animation.gif', width=600)
 
     #Stall Transcription to give time to talk about computer vision
     time.sleep(3)
