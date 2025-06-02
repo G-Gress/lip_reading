@@ -114,7 +114,7 @@ if st.button("Transcribe"):
     # st.image('animation.gif', width=600)
 
     #Stall Transcription to give time to talk about computer vision
-    time.sleep(3)
+    time.sleep(2)
 
     #Transcription prediction
     st.header("🗣️ Transcribed Text")
