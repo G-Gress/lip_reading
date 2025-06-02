@@ -1,9 +1,5 @@
-"""
-This module provides mappings between characters and numerical indices.
-Used for encoding text (char to num) and decoding model output (num to char).
-"""
-
 import tensorflow as tf
+
 
 # Define the full vocabulary
 vocab = [x for x in "abcdefghijklmnopqrstuvwxyz'?!123456789 "]
@@ -41,3 +37,4 @@ def decode_streamlit(model_pred, sequence_length = [75]) -> str:
         prediction = tf.strings.reduce_join(num_to_char(decoded[x])).numpy().decode('utf-8')
 
     return prediction
+

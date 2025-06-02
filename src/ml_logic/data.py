@@ -1,18 +1,10 @@
+import os
 from pathlib import Path
 import cv2
 from src.params import RAW_DATA_DIR
+import tensorflow as tf
+from src.ml_logic.alphabet import char_to_num
 
-SCALE = 1 / 1000  # Convert alignment timestamp (ms) to seconds
-                 # .align files give start/end in milliseconds
-                 # Frame index ≈ time_in_seconds * fps (≈25)
-
-def load_alignment_paths():
-    """
-    Return a sorted list of .align alignment file paths
-    under raw_data/alignments.
-    """
-    alignments_dir = RAW_DATA_DIR / "alignments"
-    return sorted(alignments_dir.glob("**/*.align"))
 
 def load_video_paths():
     """
@@ -64,61 +56,60 @@ def load_video_frames(path):
     """
     cap = cv2.VideoCapture(str(path))
     frames = []
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-        frames.append(frame)
+    for _ in range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT))):
+      # Get one frame as a numpy array
+      ret, frame = cap.read()
+      # Grayscale conversion
+      #gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) # => Returns 2D image
+      gray = tf.image.rgb_to_grayscale(frame) # => Returns 3D tensor
+      # Add the frame to the list
+      frames.append(gray[190:236, 80:220, :])
+    # Release the video
     cap.release()
-    return frames
 
-def load_data():
-    """
-    Load all video and alignment files, and extract per-word frame sequences.
+    # Normalize the data with z-score normalization
+    mean = tf.math.reduce_mean(frames)
+    std = tf.math.reduce_std(tf.cast(frames, tf.float32))
 
-    Process:
-    - For each .mpg video, find its corresponding .align file
-    - For each word in the alignment, convert its start/end time to frame indices
-    - Extract the corresponding sequence of frames (as numpy arrays)
+    return tf.cast((frames - mean), tf.float32) / std
 
-    Returns:
-        X (list): List of sequences of frames (1 word = [frame1, frame2, ...])
-        y (list): List of word labels (e.g., ["hello", "world", ...])
-    """
-    video_paths = load_video_paths()
-    X, y = [], []
+def load_alignments(path: str) -> tf.Tensor:
+    with open(path, "r") as f:
+        lines = f.readlines()
 
-    for video_path in video_paths:
-        speaker = video_path.parts[-2]
-        video_name = video_path.stem
-        alignment_path = RAW_DATA_DIR / "alignments" / speaker / f"{video_name}.align"
+    tokens = []
+    for line in lines:
+        parts = line.strip().split()
+        if len(parts) == 3 and parts[2] != "sil":
+            tokens.append(parts[2])  # ["bin", "blue", ...]
 
-        if not alignment_path.exists():
-            continue
+    joined = " ".join(tokens)  # "binblueattwonow"
+    chars = tf.strings.unicode_split(joined, input_encoding='UTF-8')
 
-        frames = load_video_frames(video_path)
-        n_frames = len(frames)
+    return char_to_num(chars)
 
-        word_infos = read_alignment_file(alignment_path)
+def load_data(path: tf.Tensor):
+  '''
+  Take a path as a tensor, load the video and corresponding alignments,
+  and return two tensors, one for the processed frames,
+  one for the encoded tokens.
+  '''
+  # Convert the path back into a string
+  path = bytes.decode(path.numpy())
 
-        for word, start, end in word_infos:
-            start_idx = max(0, int(start * SCALE))
-            end_idx = min(n_frames - 1, int(end * SCALE))
+  # Get file name from path
+  file_name = path.split('/')[-1].split('.')[0]
 
-            if start_idx >= end_idx:
-                continue
+  # Get path from file name
+  video_path = os.path.join('raw_data/videos/s1',f'{file_name}.mpg')
+  alignment_path = os.path.join('raw_data/alignments/s1',f'{file_name}.align')
 
-            word_frames = frames[start_idx:end_idx + 1]
-            X.append(word_frames)
-            y.append(word)
+   # Get path from file name
+#   video_path = os.path.join('./drive/MyDrive/Project/Lip_reading/raw_data//videos/s1',f'{file_name}.mpg')
+#   alignment_path = os.path.join('./drive/MyDrive/Project/Lip_reading/raw_data//alignments/s1',f'{file_name}.align')
 
-    return X, y
+  # Load data
+  frames = load_video(video_path)
+  alignments = load_alignments(alignment_path)
 
-def load_test_data(limit=100):
-    """
-    Load a small portion of data for evaluation (test mode).
-    """
-    X, y = load_data()
-    X = X[:limit]
-    y = y[:limit]
-    return X, y
+  return frames, alignments

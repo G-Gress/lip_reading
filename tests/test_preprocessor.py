@@ -23,7 +23,7 @@ def test_preprocess_returns_tensor():
 
 # Optional: Test actual video preprocessing if the file exists
 def test_preprocess_video_shape():
-    video_path = "raw_data/videos/s1/bbaf2n.mpg"  # ← あなたの動画ファイルに合わせて変更！
+    video_path = "raw_data/videos/s1/bbaf2n.mpg"  
     result = preprocessor.preprocess_video(video_path)
     assert result is not None
     assert result.shape.ndims == 5  # (1, T, H, W, C)

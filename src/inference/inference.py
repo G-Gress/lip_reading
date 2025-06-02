@@ -4,6 +4,7 @@ import numpy as np
 import tensorflow as tf
 from src.ml_logic.model import load_model
 from src.ml_logic.preprocessor import preprocess_video
+
 from src.ml_logic.preprocess_for_streamlit import preprocess_video_streamlit
 from src.ml_logic.alphabet import num_to_char, decode_streamlit
 
@@ -57,6 +58,8 @@ def run_inference(video_path: str) -> str:
     return decoded_text
 
 
+
+
 def run_inference_streamlit(video_path: str, model):
     """
     FOR STREAMLIT USE:
@@ -80,3 +83,4 @@ def run_inference_streamlit(video_path: str, model):
 
     decoded_text = decode_streamlit(y_pred)
     return decoded_text, frames
+
