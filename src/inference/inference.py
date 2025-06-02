@@ -5,6 +5,7 @@ import tensorflow as tf
 from src.ml_logic.model import load_model
 from src.ml_logic.preprocessor import preprocess_video
 from src.ml_logic.alphabet import num_to_char
+from ml_logic.preprocessor import preprocess_video, normalize_frames
 
 
 def decode_prediction(y_pred: tf.Tensor) -> str:
@@ -54,3 +55,33 @@ def run_inference(video_path: str) -> str:
 
     decoded_text = decode_prediction(y_pred)
     return decoded_text
+
+
+
+def decode_prediction(prediction: tf.Tensor):
+    decoded_tensor, _ = tf.keras.backend.ctc_decode(prediction, [75], greedy=True)
+    decoded_sequence = decoded_tensor[0][0].numpy()
+    decoded_text = tf.strings.reduce_join([num_to_char(i) for i in decoded_sequence])
+    return decoded_text
+
+from pathlib import Path
+def run_prediction(model, input):
+    '''
+    Takes a model and either:
+    - a path to a video (str or Path)
+    - a list or array of frames (np.ndarray or list of np.ndarray)
+    Returns the prediction as a string.
+    '''
+    # Preprocessing
+    if isinstance(input, (str, Path)):
+        processed_video = preprocess_video(input)
+    elif isinstance(input, (np.ndarray, list)):
+        processed_video = normalize_frames(input)
+    else:
+        raise ValueError("Unsupported input type")
+
+    # Prediction
+    prediction = model(processed_video)
+    decoded_text = decode_prediction(prediction)
+
+    return decoded_text.numpy().decode()
