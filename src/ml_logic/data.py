@@ -72,3 +72,13 @@ def load_data(path: tf.Tensor):
   alignments = load_alignments(alignment_path)
 
   return frames, alignments
+
+def load_data_mp4(path: tf.Tensor):
+    '''
+    Load a .mp4 video for inference (no alignment needed).
+    Returns: (video_frames_tensor, dummy_label_tensor)
+    '''
+    path_str = path.numpy().decode("utf-8")
+    frames = load_video(path_str)
+    dummy_align = tf.constant([0], dtype=tf.int64)  # Dummy label since not used
+    return frames, dummy_align

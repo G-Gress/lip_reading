@@ -3,6 +3,8 @@ from .data import load_data
 import cv2
 import tensorflow as tf
 import numpy as np
+from src.ml_logic.data import load_data_mp4
+from src.ml_logic.data import load_video
 
 def map_function(path):
     '''
@@ -22,60 +24,11 @@ def preprocess_video(path: str):
     processed_video = tf.expand_dims(processed_video, axis=0)
     return processed_video
 
-def preprocess_video_for_inference(path: str) -> tf.Tensor:
-    '''
-    1. Load video
-    2. Crop mouth region
-    3. Convert to grayscale
-    4. Normalize (z-score)
-    5. Return as Tensor (shape: [frames, height, width, 1])
-    '''
-
-    cap = cv2.VideoCapture(path)
-    frames = []
-
-    # 口元座標（例）
-    MOUTH_X, MOUTH_Y, MOUTH_W, MOUTH_H = 250, 230 , 140, 46
-
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-
-        # 1. 口元をクロップ
-        mouth_frame = frame[MOUTH_Y:MOUTH_Y+MOUTH_H, MOUTH_X:MOUTH_X+MOUTH_W]
-
-        # 2. グレースケール変換
-        gray = cv2.cvtColor(mouth_frame, cv2.COLOR_BGR2GRAY)  # shape: (H, W)
-
-        # 3. チャンネル次元を追加（H, W, 1）に
-        gray = np.expand_dims(gray, axis=-1)
-
-        if len(frames) < 5:
-            cv2.imshow(f"Frame {len(frames)}", gray)
-            cv2.waitKey(300)
-
-        frames.append(gray)
-
-    cap.release()
-
-    video = np.array(frames, dtype=np.float32)  # shape: (T, H, W, 1)
-
-    # 4. Zスコア正規化
-    mean = np.mean(video)
-    std = np.std(video) + 1e-8  # ゼロ除算防止
-    video = (video - mean) / std
-
-    # Tensor化
-    return tf.convert_to_tensor(video)
-
-import cv2
-import numpy as np
-import tensorflow as tf
 
 def preprocess_video_auto_crop(path: str, target_size=(46, 140)) -> tf.Tensor:
     """
-    口元を自動で検出し、クロップ → グレースケール → 正規化して Tensor を返す
+    Automatically detect the mouth region, crop it, convert to grayscale,
+    normalize the pixel values, and return it as a Tensor.
     """
     cap = cv2.VideoCapture(path)
     face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
@@ -104,6 +57,97 @@ def preprocess_video_auto_crop(path: str, target_size=(46, 140)) -> tf.Tensor:
     video = np.array(frames, dtype=np.float32)
     mean = np.mean(video)
     std = np.std(video) + 1e-8
+    video = (video - mean) / std
+
+    return tf.convert_to_tensor(video)
+
+def preprocess_video_no_align(path: str) -> tf.Tensor:
+    """
+    Preprocess video by fixed cropping (190:236, 80:220), grayscale conversion,
+    normalization, and return as a Tensor of shape (T, 46, 140, 1)
+    """
+    cap = cv2.VideoCapture(path)
+    frames = []
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        # 1. Grayscale with OpenCV (NumPy)
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)  # shape: (H, W)
+
+        # 2. Crop to fixed mouth region
+        cropped = gray[190:236, 80:220]  # shape: (46, 140)
+
+        # 3. Add channel dimension
+        cropped = np.expand_dims(cropped, axis=-1)  # shape: (46, 140, 1)
+
+        frames.append(cropped)
+
+    cap.release()
+
+    # Stack all frames into a video tensor
+    video = np.stack(frames).astype(np.float32)  # shape: (T, 46, 140, 1)
+
+    # Z-score normalization
+    mean = np.mean(video)
+    std = np.std(video) + 1e-6
+    video = (video - mean) / std
+
+    return tf.convert_to_tensor(video)
+
+import cv2
+import numpy as np
+import tensorflow as tf
+
+def preprocess_video_dynamic_crop(path: str, target_size=(46, 140)) -> tf.Tensor:
+    """
+    Detect face, crop mouth region dynamically, convert to grayscale,
+    normalize with z-score, and return a Tensor of shape (T, 46, 140, 1).
+    This matches the training format.
+    """
+    cap = cv2.VideoCapture(path)
+    face_cascade = cv2.CascadeClassifier(
+        cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+    )
+
+    frames = []
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        # Step 1: Convert to grayscale
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+        # Step 2: Detect face
+        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.3, minNeighbors=5)
+
+        if len(faces) > 0:
+            x, y, w, h = faces[0]  # use first detected face
+            # Step 3: Define mouth region relative to face box
+            mouth_y1 = y + int(0.65 * h)
+            mouth_y2 = mouth_y1 + target_size[0]
+            mouth_x1 = x + int((w - target_size[1]) / 2)
+            mouth_x2 = mouth_x1 + target_size[1]
+        else:
+            # fallback if face not detected
+            mouth_y1, mouth_y2 = 190, 236
+            mouth_x1, mouth_x2 = 80, 220
+
+        # Step 4: Crop and expand dims
+        mouth_roi = gray[mouth_y1:mouth_y2, mouth_x1:mouth_x2]
+        mouth_roi = cv2.resize(mouth_roi, (target_size[1], target_size[0]))
+        mouth_roi = np.expand_dims(mouth_roi, axis=-1)
+        frames.append(mouth_roi)
+
+    cap.release()
+
+    # Step 5: Stack and normalize
+    video = np.array(frames, dtype=np.float32)
+    mean = np.mean(video)
+    std = np.std(video) + 1e-6
     video = (video - mean) / std
 
     return tf.convert_to_tensor(video)

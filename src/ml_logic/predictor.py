@@ -1,9 +1,12 @@
+from src.ml_logic.preprocessor import preprocess_video_no_align
 from src.ml_logic.preprocessor import preprocess_video
 import tensorflow as tf
 from src.ml_logic.alphabet import num_to_char
+from pathlib import Path
 
 def decode_prediction(prediction: tf.Tensor):
-    decoded_tensor, _ = tf.keras.backend.ctc_decode(prediction, [75], greedy=True)
+    input_length = tf.shape(prediction)[1]
+    decoded_tensor, _ = tf.keras.backend.ctc_decode(prediction, [input_length], greedy=True)
     decoded_sequence = decoded_tensor[0][0].numpy()
     decoded_text = tf.strings.reduce_join([num_to_char(i) for i in decoded_sequence])
     return decoded_text
@@ -21,39 +24,42 @@ def run_prediction(model, path: str):
 
     return decoded_text.numpy().decode()
 
-import tensorflow as tf
-from src.ml_logic.alphabet import num_to_char
 
-def run_prediction_no_label(model, video_tensor: tf.Tensor) -> str:
+def run_prediction_no_align(model, input_video) -> str:
     """
-    Predict the character sequence from a preprocessed video tensor.
-    This version does not require labels or alignments.
+    Run inference on a lip-reading video (no alignment required).
+    Accepts either a preprocessed video tensor or a video file path (mp4).
 
     Args:
-        model: Trained CTC model
-        video_tensor: A Tensor of shape (T, H, W, C), e.g., (75, 46, 140, 1)
+        model: A trained CTC-based lip-reading model.
+        input_video: Either a tf.Tensor of shape (T, H, W, 1) or a str/Path to the mp4 file.
 
     Returns:
-        Decoded prediction string
+        A decoded text string predicted from the video.
     """
-    # Expand dims to add batch dimension: (1, T, H, W, C)
+
+    # 📦 If input is a path, load and preprocess the video
+    if isinstance(input_video, (str, Path)):
+        video_tensor = preprocess_video_no_align(str(input_video))
+    else:
+        video_tensor = input_video  # already preprocessed
+
+    # 📏 Add batch dimension: (1, T, H, W, 1)
     input_tensor = tf.expand_dims(video_tensor, axis=0)
 
-    # Model prediction
-    y_pred = model.predict(input_tensor)
+    # 🤖 Model prediction
+    prediction = model.predict(input_tensor)
 
-    # Take argmax to get predicted indices
-    y_pred_argmax = tf.argmax(y_pred, axis=-1)[0]  # shape: (T,)
+    # 🧮 Compute input length for CTC decoding (batch size = 1)
+    input_len = tf.shape(prediction)[1:2]
 
-    # Remove blank tokens (index 0) and repeated characters
-    decoded_indices = []
-    prev_index = -1
-    for index in y_pred_argmax.numpy():
-        if index != 0 and index != prev_index:
-            decoded_indices.append(index)
-        prev_index = index
+    # 🔤 CTC decoding
+    decoded_tensor, _ = tf.keras.backend.ctc_decode(prediction, input_length=input_len, greedy=False,
+    beam_width=10)
 
-    # Convert indices to characters
-    decoded_chars = [num_to_char(index).numpy().decode("utf-8") for index in decoded_indices]
+    # 🪄 Convert indices to characters and join
+    decoded_sequence = decoded_tensor[0][0].numpy()
+    decoded_chars = [num_to_char(i).numpy().decode("utf-8") for i in decoded_sequence if i != -1]
+    decoded_text = "".join(decoded_chars)
 
-    return "".join(decoded_chars)
+    return decoded_text
