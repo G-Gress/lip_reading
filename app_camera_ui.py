@@ -1,18 +1,20 @@
 import cv2
+from pathlib import Path
 import time
 import os
-from pathlib import Path
+import matplotlib.pyplot as plt
 import tensorflow as tf
 from src.ml_logic.model import load_model
-from src.ml_logic.preprocessor import preprocess_video_auto_crop  # ← 自動クロップ版
-from src.ml_logic.predictor import run_prediction_no_label
+from src.ml_logic.preprocessor import preprocess_video_dynamic_crop
+from src.ml_logic.predictor import run_prediction_no_align
 
-# === 設定 ===
+# === Settings ===
 SAVE_PATH = "test_videos/test1.mp4"
 FRAME_WIDTH = 640
 FRAME_HEIGHT = 480
-MOUTH_X, MOUTH_Y, MOUTH_W, MOUTH_H = 250, 270, 140, 46  # 枠の位置とサイズ（参考用）
-RECORD_SECONDS = 5  # 録画時間（秒）
+RECORD_SECONDS = 6  # Duration of recording (seconds)
+
+face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 
 def main():
     cap = cv2.VideoCapture(0)
@@ -25,13 +27,19 @@ def main():
         ret, frame = cap.read()
         if not ret:
             break
+        # Face detection
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(gray, 1.3, 5)
 
-        # 赤枠（ガイド用）
-        cv2.rectangle(frame, (MOUTH_X, MOUTH_Y), (MOUTH_X + MOUTH_W, MOUTH_Y + MOUTH_H), (0, 0, 255), 2)
-        cv2.putText(frame, "Align mouth here & press 'r' to record", (40, 40),
+        # Draw detected face(s)
+        for (x, y, w, h) in faces:
+            cv2.rectangle(frame, (x, y), (x+w, y+h), (255, 0, 0), 2)
+
+        cv2.putText(frame, "Align face & press 'r' to record", (40, 40),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
-        cv2.imshow("Mouth Alignment UI", frame)
+        cv2.imshow("Face Alignment UI", frame)
+
         key = cv2.waitKey(1)
 
         if key == ord('r'):
@@ -53,8 +61,14 @@ def main():
                 if not ret:
                     break
                 out.write(frame)
-                cv2.rectangle(frame, (MOUTH_X, MOUTH_Y), (MOUTH_X + MOUTH_W, MOUTH_Y + MOUTH_H), (0, 0, 255), 2)
-                cv2.imshow("Mouth Alignment UI", frame)
+
+
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+                for (x, y, w, h) in faces:
+                    cv2.rectangle(frame, (x, y), (x+w, y+h), (255, 0, 0), 2)
+
+                cv2.imshow("Face Alignment UI", frame)
 
             out.release()
             print(f"✅ Saved video to: {SAVE_PATH}")
@@ -66,15 +80,24 @@ def main():
     cap.release()
     cv2.destroyAllWindows()
 
-    # === 推論 ===
+    # === Predict ===
     print("\n🤖 Running inference...")
     model = load_model()
     if model is None:
         print("❌ Failed to load model.")
         return
 
-    video_tensor = preprocess_video_auto_crop(SAVE_PATH)
-    prediction = run_prediction_no_label(model, video_tensor)
+    video_tensor = preprocess_video_dynamic_crop(str(SAVE_PATH))
+    print(f"📐 Shape of processed video: {video_tensor.shape}")
+
+    # ✅ Show first cropped frame
+    sample = video_tensor[0].numpy().squeeze()
+    plt.imshow(sample, cmap='gray')
+    plt.title("🖼️ First Cropped Mouth Frame")
+    plt.axis("off")
+    plt.show()
+
+    prediction = run_prediction_no_align(model, video_tensor)
     print(f"✅ Prediction result: {prediction}")
 
 if __name__ == "__main__":

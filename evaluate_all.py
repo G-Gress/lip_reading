@@ -9,7 +9,7 @@ from src.ml_logic.eval import wer
 # --- Parameters ---
 VIDEO_DIR = Path("raw_data/videos/s1")
 ALIGN_DIR = Path("raw_data/alignments/s1")
-MAX_SAMPLES = 500  # select number
+MAX_SAMPLES = 10  # select number
 
 # --- Load the trained model ---
 print("✅ Loading the trained model...")
