@@ -4,8 +4,8 @@ import time
 import os
 import matplotlib.pyplot as plt
 import tensorflow as tf
-from src.ml_logic.model import load_model
-from src.ml_logic.preprocessor import preprocess_video_dynamic_crop
+from src.ml_logic.model import load_delib_model
+from src.ml_logic.preprocessor import preprocess_video_dlib
 from src.ml_logic.predictor import run_prediction_no_align
 
 # === Settings ===
@@ -82,18 +82,18 @@ def main():
 
     # === Predict ===
     print("\n🤖 Running inference...")
-    model = load_model()
+    model = load_delib_model()
     if model is None:
         print("❌ Failed to load model.")
         return
 
-    video_tensor = preprocess_video_dynamic_crop(str(SAVE_PATH))
+    video_tensor = preprocess_video_dlib(str(SAVE_PATH))
     print(f"📐 Shape of processed video: {video_tensor.shape}")
 
     # ✅ Show first cropped frame
     sample = video_tensor[0].numpy().squeeze()
     plt.imshow(sample, cmap='gray')
-    plt.title("🖼️ First Cropped Mouth Frame")
+    plt.title("First Cropped Mouth Frame")
     plt.axis("off")
     plt.show()
 

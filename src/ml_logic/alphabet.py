@@ -38,3 +38,4 @@ def decode_streamlit(model_pred, sequence_length = [75]) -> str:
 
     return prediction
 
+
