@@ -1,88 +1,136 @@
+import os
 from pathlib import Path
 import cv2
 from src.params import RAW_DATA_DIR
+import tensorflow as tf
+from src.ml_logic.alphabet import char_to_num
+import numpy
+from src.ml_logic.utils import extract_lip_region
+from imutils import face_utils
+import dlib
+import numpy as np
 
-# Convert alignment time (ms) to video frame indices
-SCALE = 1 / 1000  # 1000 alignment steps per second, video ~25fps
 
-def load_alignment_paths():
-    """
-    Return a sorted list of .align alignment file paths
-    under raw_data/alignments.
-    """
-    alignments_dir = RAW_DATA_DIR / "alignments"
-    return sorted(alignments_dir.glob("**/*.align"))
+def load_alignments(path: str) -> tf.Tensor:
+    with open(path, "r") as f:
+        lines = f.readlines()
 
-def load_video_paths():
-    """
-    Return a sorted list of .mpg video file paths
-    under raw_data/videos.
-    """
-    videos_dir = RAW_DATA_DIR / "videos"
-    return sorted(videos_dir.glob("**/*.mpg"))
+    tokens = []
+    for line in lines:
+        parts = line.strip().split()
+        if len(parts) == 3 and parts[2] != "sil":
+            tokens.append(parts[2])  # ["bin", "blue", ...]
 
-def read_alignment_file(path):
-    """
-    Read a .align file and return a list of (word, start_time, end_time) tuples.
-    """
-    words = []
-    with open(path, 'r') as f:
-        for line in f:
-            parts = line.strip().split()
-            if len(parts) == 3:
-                start_frame = int(parts[0])
-                end_frame = int(parts[1])
-                word = parts[2]
-                words.append((word, start_frame, end_frame))
-    return words
+    joined = " ".join(tokens)  # "binblueattwonow"
+    chars = tf.strings.unicode_split(joined, input_encoding='UTF-8')
 
-def load_video_frames(path):
-    """
-    Load video frames as a list of numpy arrays.
-    """
-    cap = cv2.VideoCapture(str(path))
+    return char_to_num(chars)
+
+detector = dlib.get_frontal_face_detector()
+predictor = dlib.shape_predictor("models/shape_predictor_68_face_landmarks.dat")
+
+def load_video(path: str) -> tf.Tensor:
+    '''
+    Load a video from a path, extract the lips with dlib, or use the previous successful frame.
+    If no previous successful frame is available and detection fails, the frame is skipped.
+    Convert to grayscale, normalize with z-score normalization, and return a numpy array of frames.
+    '''
+    cap = cv2.VideoCapture(path)
     frames = []
-    while True:
+    last_successful_frame = None  # Keep track of the last successfully extracted grayscale lip frame
+
+    # Check if video capture is successful
+    if not cap.isOpened():
+        print(f"Error: Could not open video file {path}")
+        # Return an empty tensor or handle the error appropriately
+        return tf.zeros([0, 50, 100, 1], dtype=tf.float32)
+
+    for _ in range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT))):
+        # Read the next frame
         ret, frame = cap.read()
-        if not ret:
-            break
-        frames.append(frame)
+        if not ret: # Check if frame was read successfully
+            continue # Skip if frame reading failed
+        # Extract the face with dlib
+        face = detector(frame)
+
+        if len(face) > 0: # If a face has been detected
+            shape = predictor(frame, face[0])
+            shape = face_utils.shape_to_np(shape)
+            lip = extract_lip_region(frame, shape)
+
+            # Ensure the extracted lip region is not empty before processing
+            if lip.size > 0:
+                # Grayscale conversion
+                gray = tf.image.rgb_to_grayscale(lip)
+                # Save the frame
+                frames.append(gray)
+                last_successful_frame = gray # Update the last successful frame
+
+                debug_frame = (gray.numpy().squeeze() * 255).astype(np.uint8)
+                cv2.imshow("Mouth Region", debug_frame)
+                if cv2.waitKey(30) & 0xFF == ord('q'):  # 'q'で中断可
+                    break
+            else:
+                # If extraction failed even with a detected face, try using the previous successful frame
+                if last_successful_frame is not None:
+                    frames.append(last_successful_frame)
+                # Else: If no previous successful frame, the frame is skipped implicitly (not appended)
+
+        else: # No face detected
+            # If no previous successful frame is available, the frame is skipped implicitly (not appended)
+            if last_successful_frame is not None:
+                 # Use the last successful frame as a placeholder if available
+                frames.append(last_successful_frame)
+            # Else: If no previous successful frame, the frame is skipped implicitly (not appended)
+
+
     cap.release()
-    return frames
 
-def load_data():
-    """
-    Load video-alignment pairs and extract word-level frame sequences.
+    cv2.destroyAllWindows()
 
-    Returns:
-        X (list): List of list-of-frames per word
-        y (list): List of corresponding word labels
-    """
-    video_paths = load_video_paths()
-    X, y = [], []
+    # Handle the case where no frames were processed
+    if not frames:
+        # Return an empty tensor
+        empty_frame_shape = (50, 100, 1)
+        return tf.zeros([0] + list(empty_frame_shape), dtype=tf.float32)
 
-    for video_path in video_paths:
-        speaker = video_path.parts[-2]
-        video_name = video_path.stem
-        alignment_path = RAW_DATA_DIR / "alignments" / speaker / f"{video_name}.align"
+    # Normalize the data with z-score normalization
+    mean = tf.math.reduce_mean(frames)
+    std = tf.math.reduce_std(tf.cast(frames, tf.float32))
 
-        if not alignment_path.exists():
-            continue
+    # Add a small epsilon to std to avoid division by zero
+    std = tf.maximum(std, tf.keras.backend.epsilon())
 
-        frames = load_video_frames(video_path)
-        n_frames = len(frames)
 
-        word_infos = read_alignment_file(alignment_path)
+    return tf.cast((frames - mean), tf.float32) / std
 
-        for word, start, end in word_infos:
-            start_idx = max(0, int(start * SCALE))
-            end_idx = min(n_frames - 1, int(end * SCALE))
+def load_video_dlib(path: str) -> tf.Tensor:
+    '''
+    Load a video from a path, convert it to grayscale, crop it to the face,
+    normalize it with z-score normalization, and return a numpy array of the frames.
+    '''
+    cap = cv2.VideoCapture(path)
+    frames = []
+    for _ in range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT))):
+      # Get one frame as a numpy array
+      ret, frame = cap.read()
+      # Grayscale conversion
+      #gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) # => Returns 2D image
 
-            if start_idx >= end_idx:
-                continue
+      faces = detector(frame)
+      if len(faces) > 0:
+          shape = predictor(frame, faces[0])
+          shape = face_utils.shape_to_np(shape)
+          lip = extract_lip_region(frame, shape)
 
-            word_frames = frames[start_idx:end_idx + 1]
-            X.append(word_frames)
-            y.append(word)
+      gray = tf.image.rgb_to_grayscale(lip) # => Returns 3D tensor
+      # Add the frame to the list
+      frames.append(gray)
+    # Release the video
+    cap.release()
 
-    return X, y
+    # Normalize the data with z-score normalization
+    mean = tf.math.reduce_mean(frames)
+    std = tf.math.reduce_std(tf.cast(frames, tf.float32))
+
+    return tf.cast((frames - mean), tf.float32) / std

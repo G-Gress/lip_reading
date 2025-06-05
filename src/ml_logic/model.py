@@ -1,47 +1,68 @@
 import os
 import tensorflow as tf
-from tensorflow.keras.models import Sequential, load_model as keras_load_model
-from tensorflow.keras.layers import Conv3D, MaxPooling3D, Flatten, Dense, Input
+from tensorflow import keras
+from src.ml_logic.alphabet import num_to_char
 
-def build_model():
+def load_model(path="models",
+               model_name="ctc_model.keras",
+               weights_name="checkpoint_epoch26_loss0.80.weights.h5"):
     """
-    Build a simple 3D CNN model for lip-reading.
-    Input shape: (time, height, width, channels) = (24, 46, 140, 1)
-    Output: softmax over 28 classes (a-z + apostrophe + space)
+    Load a trained CTC model structure and weights.
+
+    Args:
+        path (str): Directory where model and weights are saved
+        model_name (str): Name of the .keras model file
+        weights_name (str): Name of the .h5 weights file
+
+    Returns:
+        keras.Model or None: Loaded model or None if not found
     """
-    model = Sequential([
-        Input(shape=(24, 46, 140, 1)),  # Time, Height, Width, Channel
+    model_path = os.path.join(path, model_name)
+    weights_path = os.path.join(path, weights_name)
 
-        Conv3D(8, (3, 3, 3), activation='relu', padding='same'),
-        MaxPooling3D((1, 2, 2)),
+    if not os.path.exists(model_path):
+        print(f"❌ Model structure file not found at: {model_path}")
+        return None
 
-        Conv3D(16, (3, 3, 3), activation='relu', padding='same'),
-        MaxPooling3D((2, 2, 2)),
+    if not os.path.exists(weights_path):
+        print(f"❌ Weights file not found at: {weights_path}")
+        return None
 
-        Flatten(),
-        Dense(64, activation='relu'),
-        Dense(28, activation='softmax')  # 26 letters + apostrophe + space
-    ])
+    print(f"✅ Loading model structure from: {model_path}")
+    model = keras.models.load_model(model_path, compile=False)
 
-    model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+    print(f"✅ Loading weights from: {weights_path}")
+    model.load_weights(weights_path)
+
+    print("✅ Model fully loaded and ready!")
     return model
 
-def save_model(model, path="models/lip_model.keras"):
-    """
-    Save the trained model to the specified path.
-    """
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    model.save(path)
-    print(f"✅ Model saved to {path}")
 
-def load_model(path="models/lip_model.keras"):
+def load_delib_model(
+    path="models",
+    model_name="lipr_v2.keras",
+    weights_name="v2_loss48.66.weights.h5"
+):
     """
-    Load a saved model from the given path.
-    Returns the model object if found, else None.
+    Load the delib model. If weights_name is provided, weights will be loaded separately.
+    Otherwise, assume the .keras model includes weights.
     """
-    if os.path.exists(path):
-        print(f"📦 Loading model from {path}")
-        return keras_load_model(path)
-    else:
-        print(f"❌ No model found at {path}")
+    model_path = os.path.join(path, model_name)
+    if not os.path.exists(model_path):
+        print(f"❌ Model file not found at: {model_path}")
         return None
+
+    print(f"✅ Loading model from: {model_path}")
+    model = keras.models.load_model(model_path, compile=False)
+
+    # Optional: separate weights
+    if weights_name:
+        weights_path = os.path.join(path, weights_name)
+        if os.path.exists(weights_path):
+            print(f"✅ Loading weights from: {weights_path}")
+            model.load_weights(weights_path)
+        else:
+            print(f"⚠️ Weights file not found at: {weights_path} (skipping)")
+
+    print("✅ delib model fully loaded and ready!")
+    return model
