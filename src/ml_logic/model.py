@@ -41,7 +41,7 @@ def load_model(path="models",
 def load_delib_model(
     path="models",
     model_name="lipr_v2.keras",
-    weights_name="v2_loss48.66.weigths.h5"
+    weights_name="v2_loss48.66.weights.h5"
 ):
     """
     Load the delib model. If weights_name is provided, weights will be loaded separately.
