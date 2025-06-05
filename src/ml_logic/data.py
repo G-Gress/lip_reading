@@ -4,6 +4,10 @@ import cv2
 from src.params import RAW_DATA_DIR
 import tensorflow as tf
 from src.ml_logic.alphabet import char_to_num
+import numpy
+from src.ml_logic.utils import extract_lip_region
+from imutils import face_utils
+import dlib
 
 
 
@@ -79,6 +83,57 @@ def load_data_mp4(path: tf.Tensor):
     Returns: (video_frames_tensor, dummy_label_tensor)
     '''
     path_str = path.numpy().decode("utf-8")
-    frames = load_video(path_str)
+    frames = load_video_dlib(path_str)
     dummy_align = tf.constant([0], dtype=tf.int64)  # Dummy label since not used
     return frames, dummy_align
+
+# dlib のモデルロード（グローバルに読み込むのがベスト）
+detector = dlib.get_frontal_face_detector()
+predictor = dlib.shape_predictor("models/shape_predictor_68_face_landmarks.dat")
+
+def load_video_dlib(path: str) -> tf.Tensor:
+    """
+    Load video, extract lip region with dlib, convert to grayscale,
+    normalize with z-score, and return tensor (T, 50, 100, 1)
+    """
+    cap = cv2.VideoCapture(path)
+    frames = []
+    last_successful_frame = None
+
+    if not cap.isOpened():
+        print(f"❌ Error: Cannot open video file {path}")
+        return tf.zeros([0, 50, 100, 1], dtype=tf.float32)
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        faces = detector(frame)
+        if len(faces) > 0:
+            shape = predictor(frame, faces[0])
+            shape = face_utils.shape_to_np(shape)
+            mouth = extract_lip_region(frame, shape)
+
+            if mouth.size > 0:
+                gray = tf.image.rgb_to_grayscale(mouth)
+                frames.append(gray)
+                last_successful_frame = gray
+            elif last_successful_frame is not None:
+                frames.append(last_successful_frame)
+        elif last_successful_frame is not None:
+            frames.append(last_successful_frame)
+
+    cap.release()
+
+    if not frames:
+        return tf.zeros([0, 50, 100, 1], dtype=tf.float32)
+
+    video = tf.stack(frames)
+    mean = tf.reduce_mean(video)
+    std = tf.math.reduce_std(video) + 1e-6
+    video = (video - mean) / std
+
+    # 明示的に shape を与えると tf.data.Dataset で安定する
+    video.set_shape([None, 50, 100, 1])
+    return video

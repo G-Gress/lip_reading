@@ -5,6 +5,20 @@ import tensorflow as tf
 import numpy as np
 from src.ml_logic.data import load_data_mp4
 from src.ml_logic.data import load_video
+import dlib
+from imutils import face_utils
+from src.ml_logic.utils import extract_lip_region
+from src.ml_logic.data_fine_tune import pad_or_trim_video
+
+
+
+import torch
+import torchvision.transforms as transforms
+from PIL import Image
+
+import face_alignment  # pip install face-alignment
+from skimage import io
+
 
 def map_function(path):
     '''
@@ -151,3 +165,56 @@ def preprocess_video_dynamic_crop(path: str, target_size=(46, 140)) -> tf.Tensor
     video = (video - mean) / std
 
     return tf.convert_to_tensor(video)
+
+
+detector = dlib.get_frontal_face_detector()
+predictor = dlib.shape_predictor("models/shape_predictor_68_face_landmarks.dat")
+
+def preprocess_video_dlib(path: str, target_size=(46, 140)) -> tf.Tensor:
+    """
+    Use dlib to detect face and extract lips region frame-by-frame.
+    Returns a normalized tensor of shape (T, 46, 140, 1)
+    """
+    cap = cv2.VideoCapture(path)
+    frames = []
+    last_success = None
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        try:
+            faces = detector(frame)
+            if len(faces) > 0:
+                shape = predictor(frame, faces[0])
+                shape = face_utils.shape_to_np(shape)
+                lip = extract_lip_region(frame, shape)
+
+                if lip.size > 0:
+                    # ✅ 修正：モデルに合わせてサイズを統一
+                    lip_resized = cv2.resize(lip, (target_size[1], target_size[0]))  # (140, 46)
+
+                    gray = tf.image.rgb_to_grayscale(lip_resized)
+                    gray = tf.cast(gray, tf.float32) / 255.0
+                    frames.append(gray)
+                    last_success = gray
+                elif last_success is not None:
+                    frames.append(last_success)
+            elif last_success is not None:
+                frames.append(last_success)
+
+        except Exception as e:
+            print(f"[Warning] Landmark detection or lip extraction failed: {e}")
+            if last_success is not None:
+                frames.append(last_success)
+
+    cap.release()
+
+    if not frames:
+        return tf.zeros([0, 46, 140, 1], dtype=tf.float32)
+
+    video = tf.stack(frames)
+    mean = tf.reduce_mean(video)
+    std = tf.math.reduce_std(video) + 1e-6
+    return (video - mean) / std
