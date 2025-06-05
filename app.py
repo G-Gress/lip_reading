@@ -43,11 +43,11 @@ def show_ndarray_frames_as_gif(frames_np: list[np.ndarray]):
 @st.cache_resource
 def load_lipnet_model(weights = "model_weights/checkpoint_epoch20_loss0.92.weights.h5"):
 
-    model = load_model() #used with Kazus ml_logic.model load_model.py
-    model.load_weights(weights)
+    model = load_model(model_name='lipr_v2.keras') #used with Kazus ml_logic.model load_model.py
+    # model.load_weights(weights)
     return model
 
-model = load_lipnet_model()
+model = load_lipnet_model(weights='v2_loss12.65.weights.h5')
 
 
 # Custom style
@@ -60,7 +60,7 @@ model = load_lipnet_model()
 # """, unsafe_allow_html=True)
 
 # Title
-st.title("Lip Reading MVP")
+st.title("Read My Lips App")
 
 #Video Option Selection
 st.markdown("Select a video to simulate lip reading transcription.")

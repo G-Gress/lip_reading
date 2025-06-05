@@ -11,11 +11,10 @@ import dlib
 
 
 
-import torch
-import torchvision.transforms as transforms
+
 from PIL import Image
 
-import face_alignment  # pip install face-alignment
+# import face_alignment  # pip install face-alignment
 from skimage import io
 
 

@@ -4,8 +4,8 @@ from tensorflow import keras
 from src.ml_logic.alphabet import num_to_char
 
 def load_model(path="models",
-               model_name="ctc_model.keras",
-               weights_name="checkpoint_epoch26_loss0.80.weights.h5"):
+               model_name="lipr_v2.keras",
+               weights_name="v2_loss12.65.weights.h5"):
     """
     Load a trained CTC model structure and weights.
 
