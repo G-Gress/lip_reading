@@ -4,8 +4,9 @@ import numpy as np
 import tensorflow as tf
 from src.ml_logic.model import load_model
 from src.ml_logic.preprocessor import preprocess_video
-from src.ml_logic.alphabet import num_to_char
-from ml_logic.preprocessor import preprocess_video, normalize_frames
+
+from src.ml_logic.preprocess_for_streamlit import preprocess_video_streamlit
+from src.ml_logic.alphabet import num_to_char, decode_streamlit
 
 
 def decode_prediction(y_pred: tf.Tensor) -> str:
@@ -58,30 +59,28 @@ def run_inference(video_path: str) -> str:
 
 
 
-def decode_prediction(prediction: tf.Tensor):
-    decoded_tensor, _ = tf.keras.backend.ctc_decode(prediction, [75], greedy=True)
-    decoded_sequence = decoded_tensor[0][0].numpy()
-    decoded_text = tf.strings.reduce_join([num_to_char(i) for i in decoded_sequence])
-    return decoded_text
 
-from pathlib import Path
-def run_prediction(model, input):
-    '''
-    Takes a model and either:
-    - a path to a video (str or Path)
-    - a list or array of frames (np.ndarray or list of np.ndarray)
-    Returns the prediction as a string.
-    '''
-    # Preprocessing
-    if isinstance(input, (str, Path)):
-        processed_video = preprocess_video(input)
-    elif isinstance(input, (np.ndarray, list)):
-        processed_video = normalize_frames(input)
-    else:
-        raise ValueError("Unsupported input type")
+def run_inference_streamlit(video_path: str, model):
+    """
+    FOR STREAMLIT USE:
+    Perform inference on a single video and return decoded predicted text
+    and the preprocessed video file.
 
-    # Prediction
-    prediction = model(processed_video)
-    decoded_text = decode_prediction(prediction)
+    Args:
+        video_path (str): Path to the video file.
+        model: instantiated model
 
-    return decoded_text.numpy().decode()
+    Returns:
+        str: Decoded prediction text or error message.
+        frames = preprocessed video file
+    """
+    frames = preprocess_video_streamlit(video_path)
+    if frames is None:
+        return "❌ Failed to preprocess video."
+
+    video_tensor = tf.expand_dims(frames, axis=0)
+    y_pred = model.predict(video_tensor)
+
+    decoded_text = decode_streamlit(y_pred)
+    return decoded_text, frames
+

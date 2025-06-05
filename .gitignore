@@ -1,4 +1,11 @@
+.env
+
 raw_data/
 .DS_Store
+
 __pycache__/
 *.pyc
+
+
+backend/uploads/
+

@@ -3,8 +3,9 @@ import cv2
 import numpy as np
 import tensorflow as tf
 from pathlib import Path
+from typing import List
 
-def preprocess_video(video_path: str, max_time: int = None) -> tf.Tensor:
+def preprocess_video_streamlit(video_path: str):
     print("🔥 preprocess_video called!")
     if not os.path.exists(video_path):
         print(f"❌ File not found: {video_path}")

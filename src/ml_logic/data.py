@@ -10,14 +10,55 @@ from imutils import face_utils
 import dlib
 
 
+def load_video_paths():
+    """
+    Return a sorted list of .mpg video file paths
+    under raw_data/videos.
+    """
+    videos_dir = RAW_DATA_DIR / "videos"
+    return sorted(videos_dir.glob("**/*.mpg"))
 
-# Data loader
-def load_video(path: str) -> tf.Tensor:
+def read_alignment_file(path):
+    """
+    Read a .align file and return a list of (word, start_time, end_time) tuples.
+    """
+    words = []
+    with open(path, 'r') as f:
+        for line in f:
+            parts = line.strip().split()
+            if len(parts) == 3:
+                start_frame = int(parts[0])
+                end_frame = int(parts[1])
+                word = parts[2]
+                words.append((word, start_frame, end_frame))
+    return words
+
+def return_words(path: str) -> str:
     '''
-    Load a video from a path, convert it to grayscale, crop it to the face,
-    normalize it with z-score normalization, and return a numpy array of the frames.
+    Load alignments from a path
+    and return the words spoken in the video.
     '''
-    cap = cv2.VideoCapture(path)
+    # Open align file
+    with open(path, "r") as f:
+        lines = f.readlines()
+
+    # Tokenize alignments
+    tokens = []
+    for line in lines:
+        line = line.split()
+
+        # Ignore silence tokens
+        if line[2] != "sil":
+            tokens = [*tokens, ' ', line[2]]
+            transcription = ''.join(tokens)
+
+    return transcription
+
+def load_video_frames(path):
+    """
+    Load video frames as a list of numpy arrays.
+    """
+    cap = cv2.VideoCapture(str(path))
     frames = []
     for _ in range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT))):
       # Get one frame as a numpy array
