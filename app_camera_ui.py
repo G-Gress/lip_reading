@@ -7,12 +7,14 @@ import tensorflow as tf
 from src.ml_logic.model import load_delib_model
 from src.ml_logic.preprocessor import preprocess_video_dlib
 from src.ml_logic.predictor import run_prediction_no_align
+import numpy as np
 
 # === Settings ===
 SAVE_PATH = "test_videos/test1.mp4"
 FRAME_WIDTH = 640
 FRAME_HEIGHT = 480
-RECORD_SECONDS = 6  # Duration of recording (seconds)
+RECORD_SECONDS = 4  # Duration of recording (seconds)
+MARGIN = 20
 
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 
@@ -88,6 +90,12 @@ def main():
         return
 
     video_tensor = preprocess_video_dlib(str(SAVE_PATH))
+    for i in range(video_tensor.shape[0]):
+        frame = (video_tensor[i].numpy().squeeze() * 255).astype(np.uint8)
+        cv2.imshow("Preview: Cropped Mouth Video", frame)
+        if cv2.waitKey(30) & 0xFF == ord('q'):
+            break
+    cv2.destroyAllWindows()
     print(f"📐 Shape of processed video: {video_tensor.shape}")
 
     # ✅ Show first cropped frame
@@ -98,6 +106,7 @@ def main():
     plt.show()
 
     prediction = run_prediction_no_align(model, video_tensor)
+
     print(f"✅ Prediction result: {prediction}")
 
 if __name__ == "__main__":
