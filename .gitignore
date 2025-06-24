@@ -1,4 +1,6 @@
 .env
+models
+dlib
 
 raw_data/
 .DS_Store
@@ -8,4 +10,3 @@ __pycache__/
 
 
 backend/uploads/
-
